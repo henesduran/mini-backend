@@ -1,20 +1,31 @@
 const express = require("express");
 const app = express();
+const swaggerUi = require('swagger-ui-express');
+const openapi = require('./openapi.json');
 const PORT = 3000;
 
 app.use(express.json());
 
-const tasks = [
+const SEED_TASKS  = [
     { id: 1, title: 'Buy groceries', done: false },
     { id: 2, title: 'Walk the dog', done: false },
     { id: 3, title: 'Read a book', done: false },
 ]
 
+const tasks = SEED_TASKS.map((task) => ({ ...task }));
+
+function resetTasks() {
+  tasks.length = 0;
+  tasks.push(...SEED_TASKS.map((task) => ({ ...task })));
+}
+
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
 app.get("/",(req,res)=>{
     res.json({
         name:"Task API",
         version: "1.0",
-        endpoints: ["/tasks"],
+        endpoints: ["/tasks","/stats","/reset"],
     });
 });
 
@@ -25,16 +36,44 @@ app.get("/health",(req,res)=>{
     });
 });
 
-app.get("/tasks",(req,res) => {
-    res.json(tasks);
+app.get('/tasks', (req, res) => {
+  let result = tasks;
+
+  if (req.query.done !== undefined) {
+    if (req.query.done !== 'true' && req.query.done !== 'false') {
+      return res.status(400).json({ error: 'done must be true or false' });
+    }
+    const done = req.query.done === 'true';
+    result = result.filter((t) => t.done === done);
+  }
+
+  if (req.query.search !== undefined) {
+    const word = String(req.query.search).trim();
+    if (word === '') {
+      return res.status(400).json({ error: 'search must not be empty' });
+    }
+    const lower = word.toLowerCase();
+    result = result.filter((t) => t.title.toLowerCase().includes(lower));
+  }
+
+  res.json(result);
+});
+
+app.get('/stats', (req, res) => {
+  const done = tasks.filter((t) => t.done).length;
+  res.json({
+    total: tasks.length,
+    done,
+    open: tasks.length - done,
+  });
 });
 
 
 app.get("/tasks/:id",(req,res) => {
     const id = Number(req.params.id);
-    const task = tasks.find((t) => t.id == id);
+    const task = tasks.find((t) => t.id === id);
 
-    if (!task) res.status(404).json({error : `Task ${id} not found`});
+    if (!task) return res.status(404).json({error : `Task ${id} not found`});
     res.json(task);
 });
 
@@ -55,7 +94,7 @@ app.put("/tasks/:id",(req,res)=>{
     const id = Number(req.params.id);
     const task = tasks.find((t) => t.id===id);
 
-    if (!task) res.status(404).json({error : `Task ${id} not found`});
+    if (!task) return res.status(404).json({error : `Task ${id} not found`});
 
     const {title,done} = req.body ?? {};
 
@@ -85,16 +124,21 @@ app.put("/tasks/:id",(req,res)=>{
 
 app.delete("/tasks/:id",(req,res) => {
     const id = Number(req.params.id);
-    const task = tasks.find((t) => t.id===id);
+    const index = tasks.findIndex((t) => t.id===id);
 
     if (index === -1) {
     return res.status(404).json({ error: `Task ${id} not found` });
   };
 
   tasks.splice(index, 1);
-  
+
   res.status(204).send();
-})
+});
+
+app.post('/reset', (req, res) => {
+  resetTasks();
+  res.json(tasks);
+});
 
 app.listen(PORT,()=>{
     console.log(`Server is up at port: ${PORT}`);
