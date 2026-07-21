@@ -4,15 +4,16 @@ const PORT = 3000;
 
 app.get("/",(req,res)=>{
     res.json({
-        message:"First Backend"
+        name:"Task API",
+        version: "1.0",
+        endpoints: ["/tasks"],
     });
 });
 
 
-app.get("/status",(req,res)=>{
+app.get("/health",(req,res)=>{
     res.json({
-        message : "running",
-        timestamp : new Date().toISOString()
+        status : "ok"
     });
 });
 
