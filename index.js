@@ -46,7 +46,32 @@ app.get("/health",(req,res)=>{
 });
 
 app.get('/tasks', (req, res) => {
-  const rows = db.prepare(`SELECT * from tasks`).all()
+  let query = 'SELECT * FROM tasks';
+  const params = [];
+  const conditions = [];
+
+  if (req.query.done !== undefined) {
+    if (req.query.done !== 'true' && req.query.done !== 'false') {
+      return res.status(400).json({ error: 'done must be true or false' });
+    }
+    conditions.push('done = ?');
+    params.push(req.query.done === 'true' ? 1 : 0);
+  };
+
+  if (req.query.search !== undefined) {
+    const word = String(req.query.search).trim();
+    if (word === '') {
+      return res.status(400).json({ error: 'search must not be empty' });
+    }
+    conditions.push('title LIKE ?');
+    params.push(`%${word}%`);
+  };
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  };
+
+  const rows = db.prepare(query).all(...params);
 
   const tasks = rows.map(row => ({
     ...row,
