@@ -2,22 +2,31 @@ const express = require("express");
 const app = express();
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./openapi.json');
+const Database = require('better-sqlite3');
 const PORT = 3000;
 
 app.use(express.json());
 
-const SEED_TASKS  = [
-    { id: 1, title: 'Buy groceries', done: false },
-    { id: 2, title: 'Walk the dog', done: false },
-    { id: 3, title: 'Read a book', done: false },
-]
+const db = new Database('tasks.db');
 
-const tasks = SEED_TASKS.map((task) => ({ ...task }));
+db.exec(
+  `
+    CREATE TABLE IF NOT EXISTS tasks(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    done BOOLEAN NOT NULL DEFAULT 0
+    );
+  `
+);
 
-function resetTasks() {
-  tasks.length = 0;
-  tasks.push(...SEED_TASKS.map((task) => ({ ...task })));
-}
+const insertStmt = db.prepare(`INSERT INTO tasks (title,done) VALUES (?,?)`);
+
+const count = db.prepare(`SELECT COUNT(*) as total FROM tasks`).get()
+if (count.total === 0){
+  insertStmt.run('Buy groceries', 0);
+  insertStmt.run('Walk the dog', 0);
+  insertStmt.run('Read a book', 0);
+};
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
@@ -37,44 +46,37 @@ app.get("/health",(req,res)=>{
 });
 
 app.get('/tasks', (req, res) => {
-  let result = tasks;
+  const rows = db.prepare(`SELECT * from tasks`).all()
 
-  if (req.query.done !== undefined) {
-    if (req.query.done !== 'true' && req.query.done !== 'false') {
-      return res.status(400).json({ error: 'done must be true or false' });
-    }
-    const done = req.query.done === 'true';
-    result = result.filter((t) => t.done === done);
-  }
+  const tasks = rows.map(row => ({
+    ...row,
+    done:Boolean(row.done)
+  }));
 
-  if (req.query.search !== undefined) {
-    const word = String(req.query.search).trim();
-    if (word === '') {
-      return res.status(400).json({ error: 'search must not be empty' });
-    }
-    const lower = word.toLowerCase();
-    result = result.filter((t) => t.title.toLowerCase().includes(lower));
-  }
-
-  res.json(result);
+  res.json(tasks);
 });
 
 app.get('/stats', (req, res) => {
-  const done = tasks.filter((t) => t.done).length;
+  const done = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE done = 1`).get().count;
+  const total = db.prepare(`SELECT COUNT(*) as count FROM tasks`).get().count;
+
   res.json({
-    total: tasks.length,
+    total,
     done,
-    open: tasks.length - done,
+    open:total-done,
   });
 });
 
 
 app.get("/tasks/:id",(req,res) => {
     const id = Number(req.params.id);
-    const task = tasks.find((t) => t.id === id);
+    const row = db.prepare(`SELECT * FROM tasks WHERE id= ?`).get(id);
 
-    if (!task) return res.status(404).json({error : `Task ${id} not found`});
-    res.json(task);
+    if (!row) return res.status(404).json({error : `Task ${id} not found`});
+    res.json({
+      ...row,
+      done:Boolean(row.done)
+    });
 });
 
 app.post("/tasks",(req,res)=>{
@@ -83,16 +85,21 @@ app.post("/tasks",(req,res)=>{
     if (title === undefined || title === null || String(title).trim() === '') {
     return res.status(400).json({ error: 'title is required and cannot be empty' });
     };
-    const id = tasks.length === 0 ? 1 : Math.max(...tasks.map((t) => t.id)) + 1;
-    const task = { id, title: String(title).trim(), done: false };
 
-    tasks.push(task);
-    res.status(201).json(task);
+    const cleanTitle = String(title).trim();
+    const result = db.prepare(`INSERT INTO tasks (title,done) VALUES (?,0)`).run(cleanTitle);
+
+
+    res.status(201).json({
+      id:Number(result.lastInsertRowid),
+      title:cleanTitle,
+      done:false,
+    });
 });
 
 app.put("/tasks/:id",(req,res)=>{
     const id = Number(req.params.id);
-    const task = tasks.find((t) => t.id===id);
+    const task = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id);
 
     if (!task) return res.status(404).json({error : `Task ${id} not found`});
 
@@ -105,38 +112,55 @@ app.put("/tasks/:id",(req,res)=>{
         return res.status(400).json({ error: 'request body must include title and/or done' });
     };
 
+    let newTitle = task.title;
+    let newDone = task.done;
+
     if (hasTitle) {
     if (title === null || String(title).trim() === '') {
       return res.status(400).json({ error: 'title cannot be empty' });
     }
-    task.title = String(title).trim();
+    newTitle = String(title).trim();
   };
 
   if (hasDone) {
     if (typeof done !== 'boolean') {
       return res.status(400).json({ error: 'done must be a boolean' });
     }
-    task.done = done;
+    newDone = done ? 1 : 0;
   };
 
-  res.json(task);
+  db.prepare(`UPDATE tasks SET title = ?, done = ? WHERE id = ?`).run(newTitle,newDone,id);
+
+
+  res.json({
+    id,
+    title:newTitle,
+    done:Boolean(newDone),
+  });
 });
 
 app.delete("/tasks/:id",(req,res) => {
     const id = Number(req.params.id);
-    const index = tasks.findIndex((t) => t.id===id);
+    const result = db.prepare(`DELETE from tasks WHERE id = ?`).run(id);
 
-    if (index === -1) {
-    return res.status(404).json({ error: `Task ${id} not found` });
-  };
-
-  tasks.splice(index, 1);
-
-  res.status(204).send();
+    if (result.changes === 0) {
+      return res.status(404).json({ error: `Task ${id} not found` });
+    }
+    
+    res.status(204).send();
 });
 
 app.post('/reset', (req, res) => {
-  resetTasks();
+  db.prepare(`DELETE FROM tasks`).run();
+  db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'tasks'`).run();
+
+  insertStmt.run('Buy groceries', 0);
+  insertStmt.run('Walk the dog', 0);
+  insertStmt.run('Read a book', 0);
+
+  const rows = db.prepare(`SELECT * FROM tasks`).all();
+  const tasks = rows.map(row => ({ ...row, done: Boolean(row.done) }));
+
   res.json(tasks);
 });
 
