@@ -1,32 +1,66 @@
-const express = require("express");
-const app = express();
+require('dotenv').config();
+const { Client } = require('pg');
+const express = require('express');const app = express();
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./openapi.json');
-const Database = require('better-sqlite3');
-const PORT = 3000;
 
 app.use(express.json());
 
-const db = new Database('tasks.db');
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+    console.error("ERR: can't find DATABASE_URL environment variable!");
+    process.exit(1);
+}
+const client = new Client({ connectionString: databaseUrl });
 
-db.exec(
-  `
-    CREATE TABLE IF NOT EXISTS tasks(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    done BOOLEAN NOT NULL DEFAULT 0
-    );
-  `
-);
+async function initializeDatabase(params) {
+  try{
+    await client.connect();
+    console.log("Connected to client");
+    const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                done BOOLEAN DEFAULT FALSE
+            );
+        `;
+      await client.query(createTableQuery);
+      console.log('Table "tasks" checked/created.');
+      
+      const checkIfEmptyQuery = 'SELECT COUNT(*) FROM tasks;';
+      const result = await client.query(checkIfEmptyQuery);
 
-const insertStmt = db.prepare(`INSERT INTO tasks (title,done) VALUES (?,?)`);
+      const count = parseInt(result.rows[0].count, 10);
+      if (count === 0) {
+          const seedTasks = [
+              { title: 'Read book', done: false },
+              { title: 'Learn Docker', done: false },
+              { title: 'Learn Database', done: true }
+          ];
+          console.log('Table is empty, adding seed data...');
+          for (const task of seedTasks) {
+              const insertQuery = 'INSERT INTO tasks (title, done) VALUES ($1, $2)';
+              await client.query(insertQuery, [task.title, task.done]);
+          }
+          console.log('added seed data.');
+      } else {
+          console.log(`found ${count} tasks.No seed added.`);
+      }
+  }catch (err) {
+        console.error('Error initializing databse:', err);
+        process.exit(1);
+    }
 
-const count = db.prepare(`SELECT COUNT(*) as total FROM tasks`).get()
-if (count.total === 0){
-  insertStmt.run('Buy groceries', 0);
-  insertStmt.run('Walk the dog', 0);
-  insertStmt.run('Read a book', 0);
-};
+  }
+
+
+const port = process.env.PORT || 3000;
+initializeDatabase().then(() => {
+    app.listen(port, () => {
+        console.log(`Server is up at port: ${port}`);
+    });
+});
+
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
@@ -39,156 +73,199 @@ app.get("/",(req,res)=>{
 });
 
 
-app.get("/health",(req,res)=>{
+app.get("/health", async (req, res) => {
+  try {
+    await client.query('SELECT 1');
+    res.json({ status: "ok", db: "connected" });
+  } catch (error) {
+    res.status(503).json({ status: "unhealthy", db: "disconnected" });
+  }
+});
+app.get('/tasks', async (req, res) => {
+  
+  try{
+    let query = 'SELECT * FROM tasks';
+    const params = [];
+    const conditions = [];
+
+    if (req.query.done !== undefined) {
+      if (req.query.done !== 'true' && req.query.done !== 'false') {
+        return res.status(400).json({ error: 'done must be true or false' });
+      }
+      conditions.push(`done = $${params.length + 1 }`);
+      params.push(req.query.done === 'true');
+    };
+
+    if (req.query.search !== undefined) {
+      const word = String(req.query.search).trim();
+      if (word === '') {
+        return res.status(400).json({ error: 'search must not be empty' });
+      }
+      conditions.push(`title ILIKE $${params.length + 1}`);
+      params.push(`%${word}%`);
+    };
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    };
+
+    const results = await client.query(query, params);
+    res.json(results.rows);
+  }catch(error){
+    console.error('GET /tasks error::', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/stats', async (req, res) => {
+  try {
+    const totalResult = await client.query('SELECT COUNT(*) as count FROM tasks');
+    const doneResult = await client.query('SELECT COUNT(*) as count FROM tasks WHERE done = true');
+    
+    const total = parseInt(totalResult.rows[0].count, 10);
+    const done = parseInt(doneResult.rows[0].count, 10);
+    
     res.json({
-        status : "ok"
+      total,
+      done,
+      open: total - done,
     });
+  } catch (error) {
+    console.error('GET /stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.get('/tasks', (req, res) => {
-  let query = 'SELECT * FROM tasks';
-  const params = [];
-  const conditions = [];
 
-  if (req.query.done !== undefined) {
-    if (req.query.done !== 'true' && req.query.done !== 'false') {
-      return res.status(400).json({ error: 'done must be true or false' });
+app.get("/tasks/:id", async (req,res) => {
+  try{
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
     }
-    conditions.push('done = ?');
-    params.push(req.query.done === 'true' ? 1 : 0);
-  };
-
-  if (req.query.search !== undefined) {
-    const word = String(req.query.search).trim();
-    if (word === '') {
-      return res.status(400).json({ error: 'search must not be empty' });
+    const result = await client.query('SELECT * FROM tasks WHERE id = $1', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: `Task ${id} not found` });
     }
-    conditions.push('title LIKE ?');
-    params.push(`%${word}%`);
-  };
-
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
-  };
-
-  const rows = db.prepare(query).all(...params);
-
-  const tasks = rows.map(row => ({
-    ...row,
-    done:Boolean(row.done)
-  }));
-
-  res.json(tasks);
+    
+    res.json(result.rows[0]);
+  }catch(error){
+    console.error('GET /tasks/:id error:', error);
+    res.status(500).json({ error: 'Server Error' });
+  }
 });
 
-app.get('/stats', (req, res) => {
-  const done = db.prepare(`SELECT COUNT(*) as count FROM tasks WHERE done = 1`).get().count;
-  const total = db.prepare(`SELECT COUNT(*) as count FROM tasks`).get().count;
-
-  res.json({
-    total,
-    done,
-    open:total-done,
-  });
-});
-
-
-app.get("/tasks/:id",(req,res) => {
-    const id = Number(req.params.id);
-    const row = db.prepare(`SELECT * FROM tasks WHERE id= ?`).get(id);
-
-    if (!row) return res.status(404).json({error : `Task ${id} not found`});
-    res.json({
-      ...row,
-      done:Boolean(row.done)
-    });
-});
-
-app.post("/tasks",(req,res)=>{
-    const {title} = req.body;
+app.post("/tasks", async (req, res) => {
+  try {
+    const { title } = req.body;
 
     if (title === undefined || title === null || String(title).trim() === '') {
-    return res.status(400).json({ error: 'title is required and cannot be empty' });
-    };
+      return res.status(400).json({ error: 'title is required and cannot be empty' });
+    }
 
     const cleanTitle = String(title).trim();
-    const result = db.prepare(`INSERT INTO tasks (title,done) VALUES (?,0)`).run(cleanTitle);
+    
+    const result = await client.query(
+      'INSERT INTO tasks (title, done) VALUES ($1, $2) RETURNING *',
+      [cleanTitle, false]
+    );
 
-
-    res.status(201).json({
-      id:Number(result.lastInsertRowid),
-      title:cleanTitle,
-      done:false,
-    });
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('POST /tasks error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.put("/tasks/:id",(req,res)=>{
-    const id = Number(req.params.id);
-    const task = db.prepare(`SELECT * FROM tasks WHERE id = ?`).get(id);
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+    const existingTask = await client.query('SELECT * FROM tasks WHERE id = $1', [id]);
+    if (existingTask.rows.length === 0) {
+      return res.status(404).json({ error: `Task ${id} not found` });
+    }
 
-    if (!task) return res.status(404).json({error : `Task ${id} not found`});
-
-    const {title,done} = req.body ?? {};
-
-    const hasTitle = Object.prototype.hasOwnProperty.call(req.body ?? {},"title");
-    const hasDone = Object.prototype.hasOwnProperty.call(req.body ?? {},"done");
+    const { title, done } = req.body ?? {};
+    const hasTitle = Object.prototype.hasOwnProperty.call(req.body ?? {}, "title");
+    const hasDone = Object.prototype.hasOwnProperty.call(req.body ?? {}, "done");
 
     if (!hasTitle && !hasDone) {
-        return res.status(400).json({ error: 'request body must include title and/or done' });
-    };
+      return res.status(400).json({ error: 'request body must include title and/or done' });
+    }
 
-    let newTitle = task.title;
-    let newDone = task.done;
+    let newTitle = existingTask.rows[0].title;
+    let newDone = existingTask.rows[0].done;
 
     if (hasTitle) {
-    if (title === null || String(title).trim() === '') {
-      return res.status(400).json({ error: 'title cannot be empty' });
+      if (title === null || String(title).trim() === '') {
+        return res.status(400).json({ error: 'title cannot be empty' });
+      }
+      newTitle = String(title).trim();
     }
-    newTitle = String(title).trim();
-  };
 
-  if (hasDone) {
-    if (typeof done !== 'boolean') {
-      return res.status(400).json({ error: 'done must be a boolean' });
+    if (hasDone) {
+      if (typeof done !== 'boolean') {
+        return res.status(400).json({ error: 'done must be a boolean' });
+      }
+      newDone = done;
     }
-    newDone = done ? 1 : 0;
-  };
+    const result = await client.query(
+      'UPDATE tasks SET title = $1, done = $2 WHERE id = $3 RETURNING *',
+      [newTitle, newDone, id]
+    );
 
-  db.prepare(`UPDATE tasks SET title = ?, done = ? WHERE id = ?`).run(newTitle,newDone,id);
-
-
-  res.json({
-    id,
-    title:newTitle,
-    done:Boolean(newDone),
-  });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('PUT /tasks/:id error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.delete("/tasks/:id",(req,res) => {
-    const id = Number(req.params.id);
-    const result = db.prepare(`DELETE from tasks WHERE id = ?`).run(id);
+app.delete("/tasks/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
 
-    if (result.changes === 0) {
+    const result = await client.query('DELETE FROM tasks WHERE id = $1 RETURNING id', [id]);
+    
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: `Task ${id} not found` });
     }
     
     res.status(204).send();
+  } catch (error) {
+    console.error('DELETE /tasks/:id error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.post('/reset', (req, res) => {
-  db.prepare(`DELETE FROM tasks`).run();
-  db.prepare(`DELETE FROM sqlite_sequence WHERE name = 'tasks'`).run();
 
-  insertStmt.run('Buy groceries', 0);
-  insertStmt.run('Walk the dog', 0);
-  insertStmt.run('Read a book', 0);
-
-  const rows = db.prepare(`SELECT * FROM tasks`).all();
-  const tasks = rows.map(row => ({ ...row, done: Boolean(row.done) }));
-
-  res.json(tasks);
-});
-
-app.listen(PORT,()=>{
-    console.log(`Server is up at port: ${PORT}`);
+app.post('/reset', async (req, res) => {
+  try {
+    await client.query('DELETE FROM tasks');
+    
+    await client.query('ALTER SEQUENCE tasks_id_seq RESTART WITH 1');
+    
+    const seedTasks = [
+      { title: 'Buy groceries', done: false },
+      { title: 'Walk the dog', done: false },
+      { title: 'Read a book', done: false }
+    ];
+    
+    for (const task of seedTasks) {
+      await client.query('INSERT INTO tasks (title, done) VALUES ($1, $2)', [task.title, task.done]);
+    }
+    
+    const result = await client.query('SELECT * FROM tasks ORDER BY id');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('POST /reset error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
