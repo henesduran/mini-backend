@@ -1,0 +1,90 @@
+[
+  {
+    "name": "poetry-classic",
+    "input": {
+      "title": "A Light in the Attic",
+      "description": "It's hard to imagine a world without A Light in the Attic. This now-classic collection of poetry and drawings from Shel Silverstein celebrates its 20th anniversary with this special edition. Silverstein's humorous and creative verse can amuse the dowdiest of readers.",
+      "price_gbp": 51.77,
+      "rating_text": "Three"
+    },
+    "expected_category": "poetry",
+    "note": "Real record from scraper/output/books.json. Ground truth from the site's own breadcrumb: Poetry."
+  },
+  {
+    "name": "nonfiction-history",
+    "input": {
+      "title": "Sapiens: A Brief History of Humankind",
+      "description": "From a renowned historian comes a groundbreaking narrative of humanity's creation and evolution that explores the ways in which biology and history have defined us and enhanced our understanding of what it means to be human.",
+      "price_gbp": 54.23,
+      "rating_text": "Five"
+    },
+    "expected_category": "nonfiction",
+    "note": "Site's breadcrumb genre is 'History' — bucketed to nonfiction."
+  },
+  {
+    "name": "fiction-thriller",
+    "input": {
+      "title": "Sharp Objects",
+      "description": "WICKED above her hipbone, GIRL across her heart Words are like a road map to Camille Preaker's troubled past. Fresh from a brief stay at a psych hospital, she is sent by her Chicago editor to her tiny Missouri hometown to cover the murders of two preteen girls.",
+      "price_gbp": 47.82,
+      "rating_text": "Four"
+    },
+    "expected_category": "fiction",
+    "note": "Site's breadcrumb genre is 'Mystery' — bucketed to fiction."
+  },
+  {
+    "name": "childrens-picture-book",
+    "input": {
+      "title": "The Bear and the Piano",
+      "description": "A young bear cub discovers a piano in the forest, and through trial and error, curiosity, and determination, learns how to play beautiful music. When the bear grows older it decides to leave the forest and its family to play music in the city.",
+      "price_gbp": 36.89,
+      "rating_text": "One"
+    },
+    "expected_category": "childrens_ya",
+    "note": "Site's breadcrumb genre is 'Childrens'."
+  },
+  {
+    "name": "young-adult",
+    "input": {
+      "title": "The Natural History of Us (The Fine Art of Pretending #2)",
+      "description": "One text has the power to bring them together... will she be strong enough to reach out? Rowan Areno's therapist encourages her to go to summer camp to help her get over the death of her sister, but a group of misfit teens have their own plans.",
+      "price_gbp": 45.22,
+      "rating_text": "Three"
+    },
+    "expected_category": "childrens_ya",
+    "note": "Site's breadcrumb genre is 'Young Adult'."
+  },
+  {
+    "name": "nonfiction-travel-essay",
+    "input": {
+      "title": "Worlds Elsewhere: Journeys Around Shakespeare's Globe",
+      "description": "Andrew Dickson takes the reader on a journey to explore how Shakespeare's plays have been performed, adapted, and understood in cultures across the globe, from Germany to India, from the US to Japan.",
+      "price_gbp": 40.3,
+      "rating_text": "Five"
+    },
+    "expected_category": "nonfiction",
+    "note": "Site's breadcrumb genre is 'Nonfiction' — direct match. price_gbp is exactly at the >40 outlier boundary."
+  },
+  {
+    "name": "ambiguous-empty-description",
+    "input": {
+      "title": "Untitled Manuscript Vol. 3",
+      "description": "",
+      "price_gbp": 22.5,
+      "rating_text": "Two"
+    },
+    "expected_category": "other",
+    "note": "Hand-written, not scraped. Title alone gives no genre signal and description is empty — this is the 'when unsure, return other with low confidence' case."
+  },
+  {
+    "name": "ambiguous-short-description",
+    "input": {
+      "title": "Notes",
+      "description": "A collection of writings.",
+      "price_gbp": 15.0,
+      "rating_text": "Two"
+    },
+    "expected_category": "other",
+    "note": "Hand-written. Generic title, 4-word description — too vague to confidently place in any real category. Also exercises the very_short_description flag."
+  }
+]

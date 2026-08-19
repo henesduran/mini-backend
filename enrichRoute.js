@@ -7,7 +7,7 @@ const { extractJson } = require('./parseModelJson');
 
 const router = express.Router();
 
-const PROMPT_VERSION = 'enrich-v1';
+const PROMPT_VERSION = 'enrich-v2';
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'prompts', `${PROMPT_VERSION}.md`), 'utf8');
 const TIMEOUT_MS = 30_000;
 
