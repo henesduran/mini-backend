@@ -4,8 +4,7 @@
   "description": "A9 — polite scraper for books.toscrape.com",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "eval": "node src/evalReport.js"
+    "start": "node src/index.js"
   },
   "license": "ISC",
   "type": "commonjs",
