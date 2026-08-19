@@ -172,13 +172,19 @@ tradeoff for avoiding a hosted API's per-token bill and rate limit is that
 throughput is now bounded by one local machine's CPU instead of a
 provider's fleet.
 
-**Reliability:** timeout 30s, retries on timeout/`429`/`5xx` only
-(exponential backoff + jitter, our own logic — `client.maxRetries` is
-explicitly set to `0` so the SDK's built-in retries don't also fire),
-never on `400`/`401`/`403`/`404`. One repair retry on a schema-invalid
-response, then `422` + a `logs/quarantine.jsonl` entry — never a crash,
-never raw model text back to the caller. `LLM_ENABLED=false` returns a
-clean `503` instead of calling the model at all.
+**Reliability:** 30s timeout *per attempt*, up to 2 retries on
+timeout/`429`/`5xx` only (exponential backoff + jitter, our own logic —
+`client.maxRetries` is explicitly set to `0` so the SDK's built-in
+retries don't also fire), never on `400`/`401`/`403`/`404`. That's a
+worst case of ~90s for one call attempt (3 tries × 30s + backoff) — and
+since a schema-invalid response triggers one repair call using the same
+logic, the true worst case for one request is closer to **~3 minutes**,
+not the 30s a single number would suggest; that's the number to use for
+capacity planning, not 30s. On a genuine failure: `422` + a
+`logs/quarantine.jsonl` entry — never a crash, never raw model text back
+to the caller, even if the provider returns an empty or malformed
+response body. `LLM_ENABLED=false` returns a clean `503` instead of
+calling the model at all.
 
 **What I'd fix with another day:** try a larger local model (`llama3.2:3b`)
 against the same 8 cases to see whether the `other`-vs-`fiction` and

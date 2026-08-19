@@ -71,8 +71,8 @@ router.post('/enrich', async (req, res) => {
     return handleModelError(res, err);
   }
 
-  const firstText = first.completion.choices[0].message.content;
-  let candidate = extractJson(firstText);
+  const firstText = messageContent(first.completion);
+  let candidate = firstText ? extractJson(firstText) : null;
   let validation = candidate ? EnrichResponse.safeParse(candidate) : null;
 
   if (validation?.success) {
@@ -107,8 +107,8 @@ router.post('/enrich', async (req, res) => {
     return handleModelError(res, err);
   }
 
-  const repairText = repair.completion.choices[0].message.content;
-  candidate = extractJson(repairText);
+  const repairText = messageContent(repair.completion);
+  candidate = repairText ? extractJson(repairText) : null;
   validation = candidate ? EnrichResponse.safeParse(candidate) : null;
 
   const totalOutputTokens =
@@ -143,6 +143,14 @@ router.post('/enrich', async (req, res) => {
   });
   return res.status(422).json({ error: 'model could not produce a valid enrichment for this input' });
 });
+
+// A malformed provider response (empty `choices`, null `message`) is
+// still possible even on a 200 — e.g. a filtered or truncated response.
+// Treat "no text at all" the same as "text that failed to parse", rather
+// than letting a missing-property access throw past our own error paths.
+function messageContent(completion) {
+  return completion?.choices?.[0]?.message?.content ?? null;
+}
 
 // Never return raw model text or a raw SDK error to the caller — map
 // everything to one of two clear outcomes.

@@ -59,7 +59,7 @@ Input: `{"title": "Sapiens: A Brief History of Humankind", "description": "From 
 Output: `{"category": "nonfiction", "summary": "A history of humankind's creation and evolution.", "quality_flags": ["price_outlier"], "confidence": 0.85}`
 
 Input: `{"title": "The Bear and the Piano", "description": "A young bear cub discovers a piano in the forest, and through trial and error, curiosity, and determination, learns how to play beautiful music.", "price_gbp": 36.89, "rating_text": "One"}`
-Output: `{"category": "childrens_ya", "summary": "A young bear discovers music and leaves the forest to play in the city.", "quality_flags": [], "confidence": 0.85}`
+Output: `{"category": "childrens_ya", "summary": "A young bear cub discovers a piano and learns to play beautiful music through trial and error.", "quality_flags": [], "confidence": 0.85}`
 
 Input: `{"title": "Rp_9", "description": "misc item", "price_gbp": 12.0, "rating_text": "One"}`
 Output: `{"category": "other", "summary": "Not enough information to classify this listing confidently.", "quality_flags": ["very_short_description"], "confidence": 0.2}`
