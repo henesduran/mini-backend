@@ -1,8 +1,10 @@
-// Entry point for the polite scraper. Built up stage by stage — see
-// scraper/README.md and the project's internal learning log.
+const { fetchPage } = require('./fetchPage');
+
+const CATALOGUE_PAGE_1 = 'https://books.toscrape.com/catalogue/page-1.html';
 
 async function main() {
-  console.log('scraper scaffold — stages not built yet');
+  const { html } = await fetchPage(CATALOGUE_PAGE_1, 'catalogue-page-1');
+  console.log(`page 1 loaded, ${html.length} characters`);
 }
 
 main();
