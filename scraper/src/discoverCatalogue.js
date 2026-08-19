@@ -11,6 +11,7 @@ const MAX_PAGES = 3; // assignment scope: only the first 3 catalogue pages
 async function discoverCatalogue() {
   const cataloguePages = [];
   const bookUrls = [];
+  const sourcePageByBookUrl = new Map(); // first catalogue page a book was seen on
 
   let pageUrl = START_URL;
   let pageNumber = 1;
@@ -23,6 +24,9 @@ async function discoverCatalogue() {
       const href = $(el).attr('href');
       const absoluteUrl = new URL(href, pageUrl).toString();
       bookUrls.push(absoluteUrl);
+      if (!sourcePageByBookUrl.has(absoluteUrl)) {
+        sourcePageByBookUrl.set(absoluteUrl, pageUrl);
+      }
     });
 
     cataloguePages.push(pageUrl);
@@ -34,7 +38,7 @@ async function discoverCatalogue() {
 
   const uniqueBookUrls = [...new Set(bookUrls)];
 
-  return { cataloguePages, bookUrls, uniqueBookUrls };
+  return { cataloguePages, bookUrls, uniqueBookUrls, sourcePageByBookUrl };
 }
 
 module.exports = { discoverCatalogue };
