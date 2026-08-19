@@ -1,0 +1,11 @@
+{
+  "started_at": "2026-08-19T10:00:24.773Z",
+  "finished_at": "2026-08-19T10:01:08.993Z",
+  "duration_ms": 44220,
+  "pages_fetched": 63,
+  "cache_hits": 0,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 0,
+  "failed_page_details": []
+}
