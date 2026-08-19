@@ -9,9 +9,10 @@ if (!baseURL || !apiKey || !model) {
   process.exit(1);
 }
 
-// timeout/maxRetries are overridden per-call in enrichRoute.js (Stage 4) —
-// the SDK default (10 minute timeout, 2 silent retries) is wrong for an
-// HTTP endpoint.
-const client = new OpenAI({ baseURL, apiKey });
+// The SDK defaults to a 10-minute timeout and 2 silent built-in retries —
+// wrong for an HTTP endpoint that itself needs to answer in seconds.
+// We set our own bounds here and do our own retry logic (callWithRetry.js)
+// so we control exactly which failures get retried.
+const client = new OpenAI({ baseURL, apiKey, timeout: 30_000, maxRetries: 0 });
 
 module.exports = { client, model };
