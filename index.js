@@ -6,6 +6,9 @@ const openapi = require('./openapi.json');
 
 app.use(express.json());
 
+const enrichRoute = require('./enrichRoute');
+app.use(enrichRoute);
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
     console.error("ERR: can't find DATABASE_URL environment variable!");
